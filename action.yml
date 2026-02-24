@@ -11,8 +11,12 @@ inputs:
   anthropic_api_key:
     description: 'Anthropic API key'
     required: true
+  marketplaces:
+    description: 'Space-separated list of plugin marketplaces to add (GitHub owner/repo format)'
+    required: false
+    default: ''
   plugins:
-    description: 'Space-separated list of Claude Code plugins to install before testing'
+    description: 'Space-separated list of Claude Code plugins to install (plugin@marketplace format)'
     required: false
     default: ''
   claude_code_config:
@@ -46,6 +50,17 @@ runs:
     - name: Install Claude Code
       shell: bash
       run: npm install -g @anthropic-ai/claude-code@${{ inputs.claude_code_version }}
+
+    - name: Add marketplaces
+      if: inputs.marketplaces != ''
+      shell: bash
+      run: |
+        for marketplace in ${{ inputs.marketplaces }}; do
+          echo "Adding marketplace: $marketplace"
+          claude plugin marketplace add "$marketplace" 2>&1 || echo "Warning: failed to add marketplace $marketplace"
+        done
+        echo "Configured marketplaces:"
+        claude plugin marketplace list 2>&1 || true
 
     - name: Install plugins
       if: inputs.plugins != ''
