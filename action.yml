@@ -55,7 +55,7 @@ runs:
       run: |
         for plugin in ${{ inputs.plugins }}; do
           echo "Installing plugin: $plugin"
-          claude plugin install "$plugin" --yes 2>&1 || echo "Warning: failed to install $plugin"
+          claude plugin install "$plugin" 2>&1 || echo "Warning: failed to install $plugin"
         done
         echo "Installed plugins:"
         claude plugin list 2>&1 || true
