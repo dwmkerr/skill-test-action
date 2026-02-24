@@ -1,0 +1,59 @@
+name: 'Claude Skill Test'
+description: 'Test Claude Code skills with declarative YAML manifests'
+branding:
+  icon: 'check-circle'
+  color: 'orange'
+
+inputs:
+  test_file:
+    description: 'Path to YAML test file (or glob pattern)'
+    required: true
+  anthropic_api_key:
+    description: 'Anthropic API key'
+    required: true
+  claude_code_config:
+    description: 'Path to a Claude Code settings JSON to merge in'
+    required: false
+  claude_code_version:
+    description: 'Claude Code version to install'
+    required: false
+    default: 'latest'
+  max_turns:
+    description: 'Max agent turns per test'
+    required: false
+    default: '3'
+  timeout:
+    description: 'Per-test timeout in seconds'
+    required: false
+    default: '60'
+  model:
+    description: 'Override model for all tests'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install Claude Code
+      shell: bash
+      run: npm install -g @anthropic-ai/claude-code@${{ inputs.claude_code_version }}
+
+    - name: Install action dependencies
+      shell: bash
+      run: npm ci --prefix ${{ github.action_path }}
+
+    - name: Run skill tests
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        INPUT_TEST_FILE: ${{ inputs.test_file }}
+        INPUT_CLAUDE_CODE_CONFIG: ${{ inputs.claude_code_config }}
+        INPUT_MAX_TURNS: ${{ inputs.max_turns }}
+        INPUT_TIMEOUT: ${{ inputs.timeout }}
+        INPUT_MODEL: ${{ inputs.model }}
+      run: node ${{ github.action_path }}/src/index.js

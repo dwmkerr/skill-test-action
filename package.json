@@ -1,0 +1,15 @@
+{
+  "name": "claude-skill-test-action",
+  "version": "0.1.0",
+  "description": "GitHub Action to test Claude Code skills with declarative YAML manifests",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node src/index.js",
+    "lint": "echo 'no linter configured'"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "glob": "^10.3.0"
+  },
+  "license": "MIT"
+}

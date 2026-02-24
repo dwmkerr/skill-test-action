@@ -1,0 +1,23 @@
+skill: toolkit:skill-development
+model: sonnet
+
+tests:
+  - id: explicit-create-skill
+    prompt: "I want to create a new skill"
+    should_trigger: true
+
+  - id: implicit-intent
+    prompt: "build me a skill for generating changelogs"
+    should_trigger: true
+    expected_tools:
+      - Read
+      - Write
+
+  - id: negative-control
+    prompt: "fix the typo on line 12"
+    should_trigger: false
+
+  - id: partial-match
+    prompt: "help me write a claude code plugin"
+    should_trigger: false
+    notes: "Should hit plugin skill, not skill-development"

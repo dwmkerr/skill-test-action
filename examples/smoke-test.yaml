@@ -1,0 +1,11 @@
+skill: document-skills:pdf
+model: haiku
+
+tests:
+  - id: should-trigger-pdf
+    prompt: "convert this PDF to text"
+    should_trigger: true
+
+  - id: should-not-trigger-pdf
+    prompt: "say hello"
+    should_trigger: false
