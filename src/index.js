@@ -212,17 +212,26 @@ async function runTest({ test, targetSkill, model, maxTurns, timeoutSec }) {
     '--verbose',
     '--max-turns', maxTurns,
     '--model', model,
+    '--dangerously-skip-permissions',
   ];
 
   let stdout = '';
+  let stderr = '';
   let error = null;
 
   try {
     const result = await spawnClaude(args, timeoutSec);
     stdout = result.stdout;
+    stderr = result.stderr;
   } catch (err) {
     stdout = err.stdout || '';
+    stderr = err.stderr || '';
     error = err.message;
+  }
+
+  // Log stderr if present - critical for debugging CI issues
+  if (stderr.trim()) {
+    console.log(`         [stderr] ${truncate(stderr.trim(), 500)}`);
   }
 
   const { skillsInvoked, toolsUsed, transcript } = parseStreamJson(stdout);
