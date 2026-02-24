@@ -6,6 +6,8 @@ const path = require('path');
 const yaml = require('js-yaml');
 const { glob } = require('glob');
 
+const isCI = !!process.env.GITHUB_ACTIONS;
+
 async function main() {
   const testFilePattern = process.env.INPUT_TEST_FILE || process.argv[2];
   if (!testFilePattern) {
@@ -56,6 +58,13 @@ async function main() {
       const icon = result.pass ? 'PASS' : 'FAIL';
       console.log(`  [${icon}] ${result.id} - "${truncate(result.prompt, 50)}"`);
 
+      if (result.skillsInvoked.length > 0) {
+        console.log(`         skills invoked: [${result.skillsInvoked.join(', ')}]`);
+      }
+      if (result.toolsUsed.length > 0) {
+        console.log(`         tools used: [${result.toolsUsed.join(', ')}]`);
+      }
+
       if (!result.pass) {
         allPassed = false;
         if (!result.skillPass) {
@@ -70,6 +79,9 @@ async function main() {
           console.log(`         error: ${result.error}`);
         }
       }
+
+      // Show Claude Code transcript for this test
+      logTranscript(result);
     }
 
     allResults.push({ targetSkill, model, results });
@@ -89,6 +101,64 @@ async function main() {
   if (!allPassed) {
     process.exit(1);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Transcript logging - show Claude Code output per test
+// ---------------------------------------------------------------------------
+
+function logTranscript(result) {
+  const { id, transcript } = result;
+  if (!transcript || transcript.length === 0) return;
+
+  // Use GitHub Actions collapsible groups in CI
+  if (isCI) {
+    console.log(`::group::Transcript: ${id}`);
+  } else {
+    console.log(`\n  --- transcript: ${id} ---`);
+  }
+
+  for (const entry of transcript) {
+    switch (entry.type) {
+      case 'init':
+        console.log(`  [init] model=${entry.model}, tools=${entry.toolCount}, skills=${entry.skillCount}`);
+        if (entry.skills.length > 0) {
+          console.log(`         available skills: ${entry.skills.slice(0, 20).join(', ')}${entry.skills.length > 20 ? '...' : ''}`);
+        }
+        break;
+      case 'text':
+        console.log(`  [assistant] ${truncate(entry.text, 200)}`);
+        break;
+      case 'tool_use':
+        console.log(`  [tool_use] ${entry.name}(${formatToolInput(entry.input)})`);
+        break;
+      case 'tool_result':
+        console.log(`  [tool_result] ${truncate(entry.text, 200)}`);
+        break;
+      case 'result':
+        console.log(`  [result] cost=$${entry.cost?.toFixed(4) || '?'}, turns=${entry.turns || '?'}, stop=${entry.stopReason || '?'}`);
+        break;
+      case 'error':
+        console.log(`  [error] ${entry.text}`);
+        break;
+    }
+  }
+
+  if (isCI) {
+    console.log('::endgroup::');
+  } else {
+    console.log('  --- end transcript ---\n');
+  }
+}
+
+function formatToolInput(input) {
+  if (!input) return '';
+  const entries = Object.entries(input);
+  if (entries.length === 0) return '';
+  return entries.map(([k, v]) => {
+    const val = typeof v === 'string' ? truncate(v, 60) : JSON.stringify(v);
+    return `${k}=${val}`;
+  }).join(', ');
 }
 
 // ---------------------------------------------------------------------------
@@ -151,12 +221,11 @@ async function runTest({ test, targetSkill, model, maxTurns, timeoutSec }) {
     const result = await spawnClaude(args, timeoutSec);
     stdout = result.stdout;
   } catch (err) {
-    // Still parse any partial output captured before the error/timeout
     stdout = err.stdout || '';
     error = err.message;
   }
 
-  const { skillsInvoked, toolsUsed } = parseStreamJson(stdout);
+  const { skillsInvoked, toolsUsed, transcript } = parseStreamJson(stdout);
 
   const triggered = skillsInvoked.includes(targetSkill);
   const skillPass = triggered === should_trigger;
@@ -179,6 +248,7 @@ async function runTest({ test, targetSkill, model, maxTurns, timeoutSec }) {
     pass: skillPass && toolsPass,
     error,
     notes,
+    transcript,
   };
 }
 
@@ -188,7 +258,6 @@ async function runTest({ test, targetSkill, model, maxTurns, timeoutSec }) {
 
 function spawnClaude(args, timeoutSec) {
   return new Promise((resolve, reject) => {
-    // Remove CLAUDECODE to allow running from within a Claude Code session
     const env = { ...process.env };
     delete env.CLAUDECODE;
 
@@ -229,12 +298,13 @@ function spawnClaude(args, timeoutSec) {
 }
 
 // ---------------------------------------------------------------------------
-// Output parsing
+// Output parsing - extracts tool invocations AND builds a readable transcript
 // ---------------------------------------------------------------------------
 
 function parseStreamJson(stdout) {
   const skillsInvoked = [];
   const toolsUsed = [];
+  const transcript = [];
 
   for (const line of stdout.split('\n')) {
     const trimmed = line.trim();
@@ -247,19 +317,76 @@ function parseStreamJson(stdout) {
       continue;
     }
 
+    // Build transcript from events
+    extractTranscriptEntry(event, transcript);
+
+    // Collect tool uses
     collectToolUses(event, skillsInvoked, toolsUsed);
   }
 
   return {
     skillsInvoked: [...new Set(skillsInvoked)],
     toolsUsed: [...new Set(toolsUsed)],
+    transcript,
   };
+}
+
+function extractTranscriptEntry(event, transcript) {
+  if (!event || !event.type) return;
+
+  // System init - captures available tools and skills
+  if (event.type === 'system' && event.subtype === 'init') {
+    transcript.push({
+      type: 'init',
+      model: event.model || '?',
+      toolCount: event.tools?.length || 0,
+      skillCount: event.skills?.length || 0,
+      skills: event.skills || [],
+      tools: event.tools || [],
+    });
+    return;
+  }
+
+  // Assistant messages - extract text and tool_use blocks
+  if (event.type === 'assistant' && event.message?.content) {
+    for (const block of event.message.content) {
+      if (block.type === 'text' && block.text) {
+        transcript.push({ type: 'text', text: block.text });
+      }
+      if (block.type === 'tool_use') {
+        transcript.push({ type: 'tool_use', name: block.name, input: block.input });
+      }
+      if (block.type === 'tool_result') {
+        const text = typeof block.content === 'string'
+          ? block.content
+          : JSON.stringify(block.content || '').slice(0, 300);
+        transcript.push({ type: 'tool_result', text });
+      }
+    }
+
+    // Also check for error field on the message event
+    if (event.error) {
+      transcript.push({ type: 'error', text: event.error });
+    }
+    return;
+  }
+
+  // Result event - final summary
+  if (event.type === 'result') {
+    transcript.push({
+      type: 'result',
+      cost: event.total_cost_usd,
+      turns: event.num_turns,
+      stopReason: event.stop_reason,
+      resultText: typeof event.result === 'string' ? event.result.slice(0, 300) : '',
+    });
+    return;
+  }
 }
 
 function collectToolUses(obj, skillsInvoked, toolsUsed) {
   if (!obj || typeof obj !== 'object') return;
 
-  // Detect tool_use content blocks (nested in assistant messages)
   if (obj.type === 'tool_use' && obj.name) {
     toolsUsed.push(obj.name);
     if (obj.name === 'Skill' && obj.input?.skill) {
@@ -267,7 +394,6 @@ function collectToolUses(obj, skillsInvoked, toolsUsed) {
     }
   }
 
-  // Recurse into all values
   for (const value of Object.values(obj)) {
     if (Array.isArray(value)) {
       for (const item of value) {
