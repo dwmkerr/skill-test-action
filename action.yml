@@ -11,6 +11,10 @@ inputs:
   anthropic_api_key:
     description: 'Anthropic API key'
     required: true
+  plugins:
+    description: 'Space-separated list of Claude Code plugins to install before testing'
+    required: false
+    default: ''
   claude_code_config:
     description: 'Path to a Claude Code settings JSON to merge in'
     required: false
@@ -42,6 +46,19 @@ runs:
     - name: Install Claude Code
       shell: bash
       run: npm install -g @anthropic-ai/claude-code@${{ inputs.claude_code_version }}
+
+    - name: Install plugins
+      if: inputs.plugins != ''
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+      run: |
+        for plugin in ${{ inputs.plugins }}; do
+          echo "Installing plugin: $plugin"
+          claude plugin install "$plugin" --yes 2>&1 || echo "Warning: failed to install $plugin"
+        done
+        echo "Installed plugins:"
+        claude plugin list 2>&1 || true
 
     - name: Install action dependencies
       shell: bash
