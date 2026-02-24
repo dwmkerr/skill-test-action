@@ -42,6 +42,14 @@ tests:
 | `timeout` | no | `60` | Per-test timeout in seconds |
 | `model` | no | | Override model for all tests |
 
+## Badge
+
+Add a shields.io badge to your README:
+
+```markdown
+[![Skill Tests](https://img.shields.io/github/actions/workflow/status/<owner>/<repo>/skill-tests.yaml?label=skill%20tests)](https://github.com/<owner>/<repo>/actions/workflows/skill-tests.yaml)
+```
+
 ## Test Fields
 
 | Field | Required | Description |
