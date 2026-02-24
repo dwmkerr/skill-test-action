@@ -215,6 +215,8 @@ async function runTest({ test, targetSkill, model, maxTurns, timeoutSec }) {
     '--dangerously-skip-permissions',
   ];
 
+  console.log(`         running: claude ${args.join(' ')}`);
+
   let stdout = '';
   let stderr = '';
   let error = null;
@@ -270,7 +272,8 @@ function spawnClaude(args, timeoutSec) {
     const env = { ...process.env };
     delete env.CLAUDECODE;
 
-    const proc = spawn('claude', args, { env });
+    // Close stdin so claude doesn't block waiting for input
+    const proc = spawn('claude', args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
 
     let stdout = '';
     let stderr = '';
