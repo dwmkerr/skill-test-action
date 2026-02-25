@@ -2,6 +2,10 @@
 
 GitHub Action to test Claude Code skill routing with declarative YAML manifests.
 
+## Demo
+
+See [dwmkerr/claude-toolkit](https://github.com/dwmkerr/claude-toolkit) for a working example of this action in use.
+
 ## Usage
 
 ```yaml
@@ -12,6 +16,8 @@ GitHub Action to test Claude Code skill routing with declarative YAML manifests.
     marketplaces: dwmkerr/claude-toolkit
     plugins: toolkit@claude-toolkit
 ```
+
+The test file should be named `skill-tests.yaml` (conventionally placed in a `tests/` directory).
 
 ## Test Manifest
 
@@ -47,16 +53,34 @@ You can also specify both `skill` and `agent` in the same manifest to test that 
 
 ## Inputs
 
-| Input | Required | Default | Description |
-|-------|----------|---------|-------------|
-| `test_file` | yes | | Path to YAML test file (or glob) |
-| `anthropic_api_key` | yes | | Anthropic API key |
-| `marketplaces` | no | | Space-separated marketplace repos to add |
-| `plugins` | no | | Space-separated plugins to install |
-| `claude_code_config` | no | | Path to Claude Code settings JSON |
-| `max_turns` | no | `3` | Max agent turns per test |
-| `timeout` | no | `60` | Per-test timeout in seconds |
-| `model` | no | | Override model for all tests |
+```yaml
+- uses: dwmkerr/skill-test-action@main
+  with:
+    # Path to YAML test manifest - required
+    # Convention: tests/skill-tests.yaml (supports glob patterns)
+    test_file: tests/skill-tests.yaml
+
+    # Anthropic API key - required
+    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+    # Space-separated marketplace repos to add (owner/repo format) - optional
+    # marketplaces: dwmkerr/claude-toolkit
+
+    # Space-separated plugins to install (plugin@marketplace format) - optional
+    # plugins: toolkit@claude-toolkit
+
+    # Path to a Claude Code settings JSON to merge in - optional
+    # claude_code_config: .claude/settings.json
+
+    # Max agent turns per test - optional, default: 3
+    # max_turns: 3
+
+    # Per-test timeout in seconds - optional, default: 60
+    # timeout: 60
+
+    # Override model for all tests - optional
+    # model: haiku
+```
 
 ## Badge
 
@@ -68,15 +92,19 @@ Add a shields.io badge to your README:
 
 ## Test Fields
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `skill` | no* | Skill to test (e.g. `toolkit:skill-development`) |
-| `agent` | no* | Agent to test (e.g. `exploration-protocol-orchestrator`) |
-| `model` | no | Model to use (default: `sonnet`) |
-| `tests[].id` | yes | Unique test identifier |
-| `tests[].prompt` | yes | Prompt to send to Claude Code |
-| `tests[].should_trigger` | yes | Whether the skill/agent should be invoked |
-| `tests[].expected_tools` | no | Tools that should be called |
-| `tests[].notes` | no | Human-readable explanation |
+All fields available in a `skill-tests.yaml` manifest:
 
-*At least one of `skill` or `agent` should be specified.
+```yaml
+# At least one of 'skill' or 'agent' is required
+skill: toolkit:skill-development       # Skill to test (e.g. namespace:skill-name)
+agent: exploration-protocol-orchestrator  # Agent to test (subagent_type value)
+model: haiku                           # Model to use - optional, default: sonnet
+
+tests:
+  - id: my-test                        # Required: unique test identifier
+    prompt: "I want to create a skill" # Required: prompt to send to Claude Code
+    should_trigger: true               # Required: whether the skill/agent should be invoked
+    expected_tools:                    # Optional: tools that must be called
+      - Task
+    notes: "User explicitly asks"      # Optional: human-readable explanation
+```
