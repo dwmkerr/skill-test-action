@@ -15,6 +15,8 @@ GitHub Action to test Claude Code skill routing with declarative YAML manifests.
 
 ## Test Manifest
 
+Test skill invocations (via `Skill` tool):
+
 ```yaml
 skill: toolkit:skill-development
 model: haiku
@@ -28,6 +30,20 @@ tests:
     prompt: "fix the typo on line 12"
     should_trigger: false
 ```
+
+Test agent invocations (via `Task` tool with `subagent_type`):
+
+```yaml
+agent: exploration-protocol-orchestrator
+model: haiku
+
+tests:
+  - id: explore-feature
+    prompt: "explore the authentication feature"
+    should_trigger: true
+```
+
+You can also specify both `skill` and `agent` in the same manifest to test that a prompt triggers both.
 
 ## Inputs
 
@@ -54,10 +70,13 @@ Add a shields.io badge to your README:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `skill` | yes | Skill to test (e.g. `toolkit:skill-development`) |
+| `skill` | no* | Skill to test (e.g. `toolkit:skill-development`) |
+| `agent` | no* | Agent to test (e.g. `exploration-protocol-orchestrator`) |
 | `model` | no | Model to use (default: `sonnet`) |
 | `tests[].id` | yes | Unique test identifier |
 | `tests[].prompt` | yes | Prompt to send to Claude Code |
-| `tests[].should_trigger` | yes | Whether the skill should be invoked |
+| `tests[].should_trigger` | yes | Whether the skill/agent should be invoked |
 | `tests[].expected_tools` | no | Tools that should be called |
 | `tests[].notes` | no | Human-readable explanation |
+
+*At least one of `skill` or `agent` should be specified.

@@ -42,17 +42,18 @@ async function main() {
   for (const testFile of testFiles) {
     console.log(`\nLoading ${testFile}`);
     const manifest = yaml.load(fs.readFileSync(testFile, 'utf8'));
-    const { skill: targetSkill, model: manifestModel = 'sonnet', tests } = manifest;
+    const { skill: targetSkill, agent: targetAgent, model: manifestModel = 'sonnet', tests } = manifest;
     const model = modelOverride || manifestModel;
 
-    console.log(`  Skill: ${targetSkill}`);
+    if (targetSkill) console.log(`  Skill: ${targetSkill}`);
+    if (targetAgent) console.log(`  Agent: ${targetAgent}`);
     console.log(`  Model: ${model}`);
     console.log(`  Tests: ${tests.length}\n`);
 
     const results = [];
 
     for (const test of tests) {
-      const result = await runTest({ test, targetSkill, model, maxTurns, timeoutSec });
+      const result = await runTest({ test, targetSkill, targetAgent, model, maxTurns, timeoutSec });
       results.push(result);
 
       const icon = result.pass ? 'PASS' : 'FAIL';
@@ -60,6 +61,9 @@ async function main() {
 
       if (result.skillsInvoked.length > 0) {
         console.log(`         skills invoked: [${result.skillsInvoked.join(', ')}]`);
+      }
+      if (result.agentsInvoked.length > 0) {
+        console.log(`         agents invoked: [${result.agentsInvoked.join(', ')}]`);
       }
       if (result.toolsUsed.length > 0) {
         console.log(`         tools used: [${result.toolsUsed.join(', ')}]`);
@@ -71,6 +75,11 @@ async function main() {
           const expected = result.should_trigger ? 'trigger' : 'skip';
           const actual = result.triggered ? 'trigger' : 'skip';
           console.log(`         skill: expected ${expected}, got ${actual}`);
+        }
+        if (!result.agentPass) {
+          const expected = result.should_trigger ? 'trigger' : 'skip';
+          const actual = result.agentTriggered ? 'trigger' : 'skip';
+          console.log(`         agent: expected ${expected}, got ${actual}`);
         }
         if (!result.toolsPass) {
           console.log(`         tools: expected [${result.expected_tools.join(', ')}], got [${result.toolsUsed.join(', ')}]`);
@@ -84,7 +93,7 @@ async function main() {
       logTranscript(result);
     }
 
-    allResults.push({ targetSkill, model, results });
+    allResults.push({ targetSkill, targetAgent, model, results });
   }
 
   const summary = formatSummary(allResults);
@@ -203,7 +212,7 @@ function isPlainObject(val) {
 // Test runner
 // ---------------------------------------------------------------------------
 
-async function runTest({ test, targetSkill, model, maxTurns, timeoutSec }) {
+async function runTest({ test, targetSkill, targetAgent, model, maxTurns, timeoutSec }) {
   const { id, prompt, should_trigger, expected_tools = [], notes } = test;
 
   const args = [
@@ -236,10 +245,13 @@ async function runTest({ test, targetSkill, model, maxTurns, timeoutSec }) {
     console.log(`         [stderr] ${truncate(stderr.trim(), 500)}`);
   }
 
-  const { skillsInvoked, toolsUsed, transcript } = parseStreamJson(stdout);
+  const { skillsInvoked, toolsUsed, agentsInvoked, transcript } = parseStreamJson(stdout);
 
-  const triggered = skillsInvoked.includes(targetSkill);
-  const skillPass = triggered === should_trigger;
+  const triggered = targetSkill ? skillsInvoked.includes(targetSkill) : false;
+  const skillPass = targetSkill ? (triggered === should_trigger) : true;
+
+  const agentTriggered = targetAgent ? agentsInvoked.includes(targetAgent) : false;
+  const agentPass = targetAgent ? (agentTriggered === should_trigger) : true;
 
   let toolsPass = true;
   if (expected_tools.length > 0 && should_trigger) {
@@ -251,12 +263,15 @@ async function runTest({ test, targetSkill, model, maxTurns, timeoutSec }) {
     prompt,
     should_trigger,
     triggered,
+    agentTriggered,
     skillPass,
+    agentPass,
     toolsPass,
     expected_tools,
     toolsUsed,
     skillsInvoked,
-    pass: skillPass && toolsPass,
+    agentsInvoked,
+    pass: skillPass && agentPass && toolsPass,
     error,
     notes,
     transcript,
@@ -316,6 +331,7 @@ function spawnClaude(args, timeoutSec) {
 function parseStreamJson(stdout) {
   const skillsInvoked = [];
   const toolsUsed = [];
+  const agentsInvoked = [];
   const transcript = [];
 
   for (const line of stdout.split('\n')) {
@@ -333,12 +349,13 @@ function parseStreamJson(stdout) {
     extractTranscriptEntry(event, transcript);
 
     // Collect tool uses
-    collectToolUses(event, skillsInvoked, toolsUsed);
+    collectToolUses(event, skillsInvoked, toolsUsed, agentsInvoked);
   }
 
   return {
     skillsInvoked: [...new Set(skillsInvoked)],
     toolsUsed: [...new Set(toolsUsed)],
+    agentsInvoked: [...new Set(agentsInvoked)],
     transcript,
   };
 }
@@ -396,7 +413,7 @@ function extractTranscriptEntry(event, transcript) {
   }
 }
 
-function collectToolUses(obj, skillsInvoked, toolsUsed) {
+function collectToolUses(obj, skillsInvoked, toolsUsed, agentsInvoked) {
   if (!obj || typeof obj !== 'object') return;
 
   if (obj.type === 'tool_use' && obj.name) {
@@ -404,15 +421,18 @@ function collectToolUses(obj, skillsInvoked, toolsUsed) {
     if (obj.name === 'Skill' && obj.input?.skill) {
       skillsInvoked.push(obj.input.skill);
     }
+    if (obj.name === 'Task' && obj.input?.subagent_type) {
+      agentsInvoked.push(obj.input.subagent_type);
+    }
   }
 
   for (const value of Object.values(obj)) {
     if (Array.isArray(value)) {
       for (const item of value) {
-        collectToolUses(item, skillsInvoked, toolsUsed);
+        collectToolUses(item, skillsInvoked, toolsUsed, agentsInvoked);
       }
     } else if (isPlainObject(value)) {
-      collectToolUses(value, skillsInvoked, toolsUsed);
+      collectToolUses(value, skillsInvoked, toolsUsed, agentsInvoked);
     }
   }
 }
@@ -426,10 +446,11 @@ function formatSummary(allResults) {
   let totalPassed = 0;
   let totalTests = 0;
 
-  for (const { targetSkill, model, results } of allResults) {
-    md += `## Skill: \`${targetSkill}\` (model: ${model})\n\n`;
-    md += '| Test ID | Prompt | Expected | Actual | Tools | Result |\n';
-    md += '|---------|--------|----------|--------|-------|--------|\n';
+  for (const { targetSkill, targetAgent, model, results } of allResults) {
+    const target = [targetSkill, targetAgent].filter(Boolean).map(s => `\`${s}\``).join(' / ');
+    md += `## Target: ${target} (model: ${model})\n\n`;
+    md += '| Test ID | Prompt | Expected | Skill | Agent | Tools | Result |\n';
+    md += '|---------|--------|----------|-------|-------|-------|--------|\n';
 
     for (const r of results) {
       totalTests++;
@@ -437,13 +458,18 @@ function formatSummary(allResults) {
 
       const prompt = truncate(r.prompt, 30);
       const expected = r.should_trigger ? 'trigger' : 'skip';
-      const actual = r.triggered ? 'trigger' : 'skip';
+      const skill = targetSkill
+        ? (r.skillPass ? 'PASS' : 'FAIL')
+        : '-';
+      const agent = targetAgent
+        ? (r.agentPass ? 'PASS' : 'FAIL')
+        : '-';
       const tools = r.expected_tools.length > 0
         ? (r.toolsPass ? 'PASS' : 'FAIL')
         : '-';
       const result = r.pass ? 'PASS' : 'FAIL';
 
-      md += `| ${r.id} | "${prompt}" | ${expected} | ${actual} | ${tools} | ${result} |\n`;
+      md += `| ${r.id} | "${prompt}" | ${expected} | ${skill} | ${agent} | ${tools} | ${result} |\n`;
     }
 
     md += '\n';
