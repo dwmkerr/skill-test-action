@@ -117,12 +117,16 @@ async function main() {
 // ---------------------------------------------------------------------------
 
 function logTranscript(result) {
-  const { id, transcript } = result;
+  const { id, pass, transcript } = result;
   if (!transcript || transcript.length === 0) return;
 
-  // Use GitHub Actions collapsible groups in CI
+  // Collapse passing transcripts, show failing ones directly
   if (isCI) {
-    console.log(`::group::Transcript: ${id}`);
+    if (pass) {
+      console.log(`::group::Transcript: ${id}`);
+    } else {
+      console.log(`         transcript:`);
+    }
   } else {
     console.log(`\n  --- transcript: ${id} ---`);
   }
@@ -154,7 +158,9 @@ function logTranscript(result) {
   }
 
   if (isCI) {
-    console.log('::endgroup::');
+    if (pass) {
+      console.log('::endgroup::');
+    }
   } else {
     console.log('  --- end transcript ---\n');
   }
