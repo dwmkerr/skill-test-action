@@ -60,7 +60,8 @@ You can also specify both `skill` and `agent` in the same manifest to test that 
     # Convention: tests/skill-tests.yaml (supports glob patterns)
     test_file: tests/skill-tests.yaml
 
-    # Anthropic API key - required
+    # Anthropic API key - required for direct Anthropic API and proxy usage
+    # Not needed when using Bedrock or Vertex
     anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
     # Space-separated marketplace repos to add (owner/repo format) - optional
@@ -80,6 +81,23 @@ You can also specify both `skill` and `agent` in the same manifest to test that 
 
     # Override model for all tests - optional
     # model: haiku
+
+    # --- Alternative model providers ---
+
+    # Custom Anthropic API base URL - optional
+    # Use with LiteLLM or other OpenAI-compatible proxies
+    # anthropic_base_url: https://my-litellm-proxy.example.com
+
+    # AWS Bedrock - set use_bedrock: "true" and supply AWS credentials via
+    # environment (OIDC, IAM role, or AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY)
+    # use_bedrock: "true"
+    # bedrock_aws_region: us-east-1   # optional: overrides AWS_REGION
+
+    # Google Vertex AI - set use_vertex: "true" and supply Google credentials
+    # via GOOGLE_APPLICATION_CREDENTIALS or Workload Identity Federation
+    # use_vertex: "true"
+    # vertex_project_id: my-gcp-project
+    # vertex_region: us-east5
 ```
 
 ## Badge

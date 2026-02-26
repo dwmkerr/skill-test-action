@@ -16,15 +16,39 @@ async function main() {
     process.exit(1);
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.error('ANTHROPIC_API_KEY environment variable is required');
-    process.exit(1);
-  }
-
   const configFile = process.env.INPUT_CLAUDE_CODE_CONFIG || '';
   const maxTurns = process.env.INPUT_MAX_TURNS || '3';
   const timeoutSec = parseInt(process.env.INPUT_TIMEOUT || '60', 10);
   const modelOverride = process.env.INPUT_MODEL || '';
+
+  // Configure alternative model providers
+  const useBedrock = process.env.INPUT_USE_BEDROCK === 'true';
+  const bedrockAwsRegion = process.env.INPUT_BEDROCK_AWS_REGION || '';
+  const useVertex = process.env.INPUT_USE_VERTEX === 'true';
+  const vertexProjectId = process.env.INPUT_VERTEX_PROJECT_ID || '';
+  const vertexRegion = process.env.INPUT_VERTEX_REGION || '';
+  const anthropicBaseUrl = process.env.ANTHROPIC_BASE_URL || '';
+
+  const usingAlternativeProvider = useBedrock || useVertex || !!anthropicBaseUrl;
+  if (!process.env.ANTHROPIC_API_KEY && !usingAlternativeProvider) {
+    console.error('ANTHROPIC_API_KEY environment variable is required when not using Bedrock, Vertex, or a custom base URL');
+    process.exit(1);
+  }
+
+  if (useBedrock) {
+    process.env.CLAUDE_CODE_USE_BEDROCK = '1';
+    if (bedrockAwsRegion) process.env.AWS_REGION = bedrockAwsRegion;
+    console.log(`Provider: AWS Bedrock${bedrockAwsRegion ? ` (region: ${bedrockAwsRegion})` : ''}`);
+  } else if (useVertex) {
+    process.env.CLAUDE_CODE_USE_VERTEX = '1';
+    if (vertexProjectId) process.env.ANTHROPIC_VERTEX_PROJECT_ID = vertexProjectId;
+    if (vertexRegion) process.env.CLOUD_ML_REGION = vertexRegion;
+    console.log(`Provider: Google Vertex AI (project: ${vertexProjectId}, region: ${vertexRegion})`);
+  } else if (anthropicBaseUrl) {
+    console.log(`Provider: Custom endpoint (${anthropicBaseUrl})`);
+  } else {
+    console.log('Provider: Anthropic API (direct)');
+  }
 
   if (configFile && fs.existsSync(configFile)) {
     mergeClaudeConfig(configFile);

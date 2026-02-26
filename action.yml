@@ -9,8 +9,33 @@ inputs:
     description: 'Path to YAML test file (or glob pattern)'
     required: true
   anthropic_api_key:
-    description: 'Anthropic API key'
-    required: true
+    description: 'Anthropic API key (required for direct Anthropic API; not needed for Bedrock or Vertex)'
+    required: false
+    default: ''
+  anthropic_base_url:
+    description: 'Custom Anthropic API base URL (e.g. for LiteLLM proxy or Azure endpoint)'
+    required: false
+    default: ''
+  use_bedrock:
+    description: 'Use AWS Bedrock as the Claude provider (set to "true" to enable)'
+    required: false
+    default: 'false'
+  bedrock_aws_region:
+    description: 'AWS region for Bedrock (e.g. us-east-1); overrides AWS_REGION env var'
+    required: false
+    default: ''
+  use_vertex:
+    description: 'Use Google Vertex AI as the Claude provider (set to "true" to enable)'
+    required: false
+    default: 'false'
+  vertex_project_id:
+    description: 'Google Cloud project ID for Vertex AI'
+    required: false
+    default: ''
+  vertex_region:
+    description: 'Google Cloud region for Vertex AI (e.g. us-east5)'
+    required: false
+    default: ''
   marketplaces:
     description: 'Space-separated list of plugin marketplaces to add (GitHub owner/repo format)'
     required: false
@@ -83,6 +108,12 @@ runs:
       shell: bash
       env:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        ANTHROPIC_BASE_URL: ${{ inputs.anthropic_base_url }}
+        INPUT_USE_BEDROCK: ${{ inputs.use_bedrock }}
+        INPUT_BEDROCK_AWS_REGION: ${{ inputs.bedrock_aws_region }}
+        INPUT_USE_VERTEX: ${{ inputs.use_vertex }}
+        INPUT_VERTEX_PROJECT_ID: ${{ inputs.vertex_project_id }}
+        INPUT_VERTEX_REGION: ${{ inputs.vertex_region }}
         INPUT_TEST_FILE: ${{ inputs.test_file }}
         INPUT_CLAUDE_CODE_CONFIG: ${{ inputs.claude_code_config }}
         INPUT_MAX_TURNS: ${{ inputs.max_turns }}
